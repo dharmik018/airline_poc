@@ -1,0 +1,167 @@
+version: 2  # dbt file format version
+
+models:
+  - name: flight_reporting  # the silver model
+    columns:
+      - name: flight_key
+        data_tests: [not_null, unique]  # every flight has one unique key
+      - name: flight_date
+        data_tests: [not_null]  # fails if the date format is wrong
+      - name: airline_code
+        data_tests: [not_null]
+      - name: origin_airport_code
+        data_tests: [not_null]
+      - name: destination_airport_code
+        data_tests: [not_null]
+      - name: scheduled_departure_at
+        data_tests: [not_null]  # fails if the time cleaner is wrong
+      - name: is_cancelled
+        data_tests: [not_null]
+      - name: cancellation_code
+        data_tests:
+          - accepted_values:
+              values: ['A', 'B', 'C', 'D']  # only these codes are valid
+  - name: airports  # the new silver model
+    columns:
+      - name: airport_id  # OurAirports row id
+        tests:
+          - not_null  # every row has an id
+          - unique  # one row per id
+      - name: airport_ident  # OurAirports own code
+        tests:
+          - not_null  # no nulls in bronze
+          - unique  # one row per ident
+      - name: iata_code  # join key for flights
+        tests:
+          - not_null  # every kept airport has a code
+          - unique  # one row per code, or gold joins repeat flights
+      - name: airport_name  # airport name
+        tests:
+          - not_null  # no nulls in bronze
+      - name: airport_type  # type of airport
+        tests:
+          - not_null  # no nulls in bronze
+          - accepted_values:  # closed is already removed
+              config:
+                severity: warn  # a new type should warn, not fail
+              arguments:
+                values: ['large_airport', 'medium_airport', 'small_airport', 'heliport', 'seaplane_base', 'balloonport']
+      - name: has_scheduled_service  # yes or no in the source
+        tests:
+          - not_null  # an unknown source value becomes null, so this catches it
+      - name: latitude  # needed for weather
+        tests:
+          - not_null  # a failed cast or bad range becomes null
+      - name: longitude  # needed for weather
+        tests:
+          - not_null  # a failed cast or bad range becomes null
+      - name: country_code  # from airports
+        tests:
+          - not_null  # needed for the country join
+      - name: country_name  # from the country join
+        tests:
+          - not_null  # every airport should find a country
+      - name: continent_code  # from the country join
+        tests:
+          - not_null  # every country has a continent
+          - accepted_values:  # the 7 continent codes
+              arguments:
+                values: ['AF', 'AN', 'AS', 'EU', 'NA', 'OC', 'SA']
+      - name: region_code  # from airports
+        tests:
+          - not_null  # needed for the region join
+      - name: region_name  # from the region join
+        tests:
+          - not_null  # every airport should find a region
+  
+  - name: airport_codes
+    columns:
+      - name: airport_code  # the code from the flight
+        tests:
+          - not_null  # every flight has a code
+          - unique  # one row per code, or gold joins repeat flights
+      - name: airport_ident  # the airport this code belongs to
+        tests:
+          - not_null  # every flight has an airport
+          - relationships:  # every code should match an airport
+              arguments:
+                to: ref('airports')
+                field: airport_ident
+  
+  - name: runways 
+    columns:
+      - name: runway_id  # one id per runway
+        tests:
+          - not_null  # every row has an id
+          - unique  # one row per runway
+      - name: airport_ident  # links to airports
+        tests:
+          - not_null  # every runway has an airport
+          - relationships:  # the airport must exist in silver.airports
+              arguments:
+                to: ref('airports')
+                field: airport_ident
+      - name: is_closed  # open or closed
+        tests:
+          - not_null  # an unknown source value becomes null, so this catches it
+      - name: length_feet  # runway length     --IMP 87 runways have no length in the source
+        tests:
+          - not_null:  # 292 nulls are expected in the source
+              config:
+                severity: warn  # warn, not fail
+
+  - name: airlines
+    columns:
+      - name: airline_id  # OpenFlights id
+        tests:
+          - not_null  # every row has an id
+          - unique  # one row per airline
+      - name: iata_code  # join key for flights
+        tests:
+          - not_null  # filtered already
+          - unique  # one airline per code, or gold repeats flights
+      - name: airline_name  # airline name
+        tests:
+          - not_null  # every airline has a name
+      - name: is_active  # Y or N in the source
+        tests:
+          - not_null  # an unknown value becomes null, so this catches it
+
+  - name: weather  # silver hourly weather per airport
+    columns:
+      - name: airport_ident  # airport code
+        tests: 
+          - not_null # every row needs an airport
+      - name: weather_hour_local  # local hour
+        tests: 
+          - not_null  # every row needs an hour
+      - name: temperature_c  # temperature
+        tests: 
+          - not_null  # failed cast gives null
+      - name: wind_speed_kmh  # wind speed
+        tests: 
+          - not_null  # failed cast gives null
+      - name: weather_code  # WMO code
+        tests: 
+          - not_null  # failed cast gives null
+
+  - name: weather_live  # live forecast, last 7 days only
+    columns:
+      - name: airport_ident
+        data_tests:  # use "tests:" if your dbt is older than 1.8
+          - not_null  # every row has an airport
+          - relationships:  # every live airport must exist in past weather
+              to: ref('weather')
+              field: airport_ident
+      - name: weather_hour_local
+        data_tests:
+          - not_null  # a null here means the time cast failed
+      - name: fetched_at_utc
+        data_tests:
+          - not_null  # a null here means the fetch time cast failed
+      - name: temperature_c
+        data_tests:
+          - not_null  # a null here means a numeric cast failed
+      - name: weather_code
+        data_tests:
+          - not_null  # needed for the gold weather group

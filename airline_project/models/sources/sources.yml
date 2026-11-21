@@ -1,0 +1,16 @@
+version: 2  # dbt file format version
+
+sources:
+  - name: bronze  # the name we use in {{ source('bronze', ...) }}
+    database: airline_project  # the Databricks catalog
+    schema: bronze  # the Databricks schema
+    tables:
+      - name: reporting_ontime_flights  # flights, source for silver.flight_reporting
+      - name: flight_bts  # traffic, source for silver.traffic_bts
+      - name: ourairports_airports  # source for silver.airports
+      - name: ourairports_countries  # source for silver.airports
+      - name: ourairports_regions  # source for silver.airports
+      - name: ourairports_runways  # source for silver.runways
+      - name: openflights_airlines  # source for silver.airlines
+      - name: weather  # source for silver.weather
+      - name: weather_live 

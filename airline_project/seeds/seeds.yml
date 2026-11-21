@@ -1,0 +1,20 @@
+version: 2
+seeds:
+  - name: dim_weather_code  # weather code lookup
+    config:
+      schema: gold
+      column_types:
+        weather_code: int  # keep the code as a number
+    columns:
+      - name: weather_code  # the key
+        tests: [unique, not_null]  # one row per code
+      - name: condition_group  # group name
+        tests:
+          - not_null  # every code has a group
+          - accepted_values:
+              values: ['clear', 'cloudy', 'fog', 'drizzle', 'rain', 'freezing', 'snow', 'thunderstorm']  # only these 8 groups
+      - name: severity_level  # severity
+        tests:
+          - accepted_values:
+              values: [0, 1, 2, 3]  # only these 4 levels
+              quote: false  # numbers, not text

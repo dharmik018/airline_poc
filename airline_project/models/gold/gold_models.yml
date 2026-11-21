@@ -1,0 +1,341 @@
+version: 2  # dbt file format version
+
+
+models:
+  - name: dim_date
+    columns:
+      - name: date_key
+        data_tests: [unique, not_null]  
+      - name: full_date
+        data_tests: [unique, not_null]
+
+  - name: dim_airline  # one row per airline
+    columns:
+      - name: airline_key
+        data_tests: [unique, not_null]  # primary key
+      - name: iata_code
+        data_tests: [unique, not_null]  # one row per IATA code
+      - name: airline_name
+        data_tests: [not_null]  # every airline has a name
+      - name: is_active
+        data_tests: [not_null]  # active flag is always set
+
+  - name: dim_airport  # one row per airport
+    columns:
+      - name: airport_key
+        data_tests: [unique, not_null]  # primary key
+      - name: airport_ident
+        data_tests: [unique, not_null]  # natural key
+      - name: iata_code
+        data_tests: [unique, not_null]  # silver keeps IATA airports only
+      - name: airport_name
+        data_tests: [not_null]  # every airport has a name
+      - name: latitude
+        data_tests: [not_null]  # needed for the live weather list
+      - name: longitude
+        data_tests: [not_null]  # needed for the live weather list
+      - name: country_code
+        data_tests: [not_null]  # every airport has a country
+      - name: has_runway_data
+        data_tests: [not_null]  # flag is always true or false
+
+
+  - name: fact_flight  # one row per flight leg
+    columns:
+      - name: flight_key
+        data_tests: [unique, not_null]  # primary key
+      - name: source_flight_key
+        data_tests: [unique, not_null]  # silver key
+      - name: date_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: airline_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_airline')
+                field: airline_key
+      - name: origin_airport_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_airport')
+                field: airport_key
+      - name: destination_airport_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_airport')
+                field: airport_key
+      - name: flight_date
+        data_tests: [not_null]  # every flight has a date
+      - name: is_cancelled
+        data_tests: [not_null]  # flag is always set
+      - name: is_diverted
+        data_tests: [not_null]  # flag is always set
+
+
+  - name: fact_weather_past  # one row per airport per hour
+    columns:
+      - name: weather_hour_key
+        data_tests: [unique, not_null]  # primary key
+      - name: airport_ident
+        data_tests: [not_null]  # natural key
+      - name: airport_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_airport')
+                field: airport_key
+      - name: date_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: weather_code
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_weather_code')
+                field: weather_code
+      - name: weather_hour_local
+        data_tests: [not_null]  # every row has an hour
+      - name: timezone_name
+        data_tests: [not_null]  # needed to convert to UTC
+      - name: temperature_c
+        data_tests: [not_null]  # core weather value
+
+  - name: fact_flight_weather  # one row per flight leg with origin and destination weather
+    columns:
+      - name: flight_key
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fact_flight')
+                field: flight_key
+      - name: source_flight_key
+        data_tests: [unique, not_null]  # silver key
+      - name: date_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: airline_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_airline')
+                field: airline_key
+      - name: origin_airport_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_airport')
+                field: airport_key
+      - name: destination_airport_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_airport')
+                field: airport_key
+      - name: origin_weather_hour_key
+        data_tests:
+          - relationships:  # null allowed when no weather
+              arguments:
+                to: ref('fact_weather_past')
+                field: weather_hour_key
+      - name: destination_weather_hour_key
+        data_tests:
+          - relationships:  # null allowed when no weather
+              arguments:
+                to: ref('fact_weather_past')
+                field: weather_hour_key
+      - name: origin_weather_code
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_weather_code')
+                field: weather_code
+      - name: destination_weather_code
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_weather_code')
+                field: weather_code
+      - name: has_origin_weather
+        data_tests: [not_null]  # flag is always true or false
+      - name: has_destination_weather
+        data_tests: [not_null]  # flag is always true or false
+
+  - name: fact_weather_live  # one row per airport, forecast hour and fetch
+    columns:
+      - name: weather_live_key
+        data_tests: [unique, not_null]  # primary key
+      - name: airport_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_airport')
+                field: airport_key
+      - name: date_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: weather_code
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_weather_code')
+                field: weather_code
+      - name: airport_ident
+        data_tests: [not_null]  # natural key
+      - name: weather_hour_local
+        data_tests: [not_null]  # forecast hour
+      - name: fetched_at
+        data_tests: [not_null]  # fetch time
+      - name: lead_hours
+        data_tests: [not_null]  # a null means the time zone conversion failed
+      - name: timezone_name
+        data_tests: [not_null]  # needed for lead_hours
+      - name: temperature_c
+        data_tests: [not_null]  # core weather value
+
+  - name: delay_pattern
+    columns:
+      - name: pattern_key
+        data_tests: [unique, not_null]
+      - name: origin_airport_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_airport')
+                field: airport_key
+      - name: part_of_day
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['night', 'morning', 'afternoon', 'evening']
+      - name: precipitation_band
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['none', 'light', 'moderate', 'heavy']
+      - name: wind_gust_band
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['calm', 'windy', 'strong']
+      - name: is_freezing
+        data_tests: [not_null]
+      - name: flight_count
+        data_tests: [not_null]
+      - name: operated_flight_count
+        data_tests: [not_null]
+      - name: cancelled_flight_count
+        data_tests: [not_null]
+      - name: diverted_flight_count
+        data_tests: [not_null]
+      - name: delayed_departure_count
+        data_tests: [not_null]
+      - name: pattern_start_date
+        data_tests: [not_null]
+      - name: pattern_end_date
+        data_tests: [not_null]
+      - name: gold_loaded_at
+        data_tests: [not_null]
+
+  - name: delay_live_prediction
+    columns:
+      - name: prediction_key
+        data_tests: [unique, not_null]
+      - name: airport_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_airport')
+                field: airport_key
+      - name: date_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: weather_code
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_weather_code')
+                field: weather_code
+      - name: pattern_key
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('delay_pattern')
+                field: pattern_key
+      - name: airport_ident
+        data_tests: [not_null]
+      - name: weather_hour_local
+        data_tests: [not_null]
+      - name: fetched_at
+        data_tests: [not_null]
+      - name: lead_hours
+        data_tests: [not_null]
+      - name: part_of_day
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['night', 'morning', 'afternoon', 'evening']
+      - name: precipitation_band
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['none', 'light', 'moderate', 'heavy']
+      - name: wind_gust_band
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['calm', 'windy', 'strong']
+      - name: data_confidence
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['high', 'medium', 'low', 'none']
+      - name: risk_level
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['low', 'medium', 'high', 'unknown']
+      - name: gold_loaded_at
+        data_tests: [not_null]

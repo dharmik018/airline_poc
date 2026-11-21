@@ -1,0 +1,29 @@
+weather_code,description,condition_group,severity_level
+0,Clear sky,clear,0
+1,Mainly clear,clear,0
+2,Partly cloudy,cloudy,0
+3,Overcast,cloudy,0
+45,Fog,fog,2
+48,Depositing rime fog,fog,3
+51,Light drizzle,drizzle,1
+53,Moderate drizzle,drizzle,1
+55,Dense drizzle,drizzle,2
+56,Light freezing drizzle,freezing,2
+57,Dense freezing drizzle,freezing,3
+61,Slight rain,rain,1
+63,Moderate rain,rain,2
+65,Heavy rain,rain,3
+66,Light freezing rain,freezing,2
+67,Heavy freezing rain,freezing,3
+71,Slight snow fall,snow,1
+73,Moderate snow fall,snow,2
+75,Heavy snow fall,snow,3
+77,Snow grains,snow,1
+80,Slight rain showers,rain,1
+81,Moderate rain showers,rain,2
+82,Violent rain showers,rain,3
+85,Slight snow showers,snow,1
+86,Heavy snow showers,snow,3
+95,Thunderstorm,thunderstorm,3
+96,Thunderstorm with slight hail,thunderstorm,3
+99,Thunderstorm with heavy hail,thunderstorm,3
